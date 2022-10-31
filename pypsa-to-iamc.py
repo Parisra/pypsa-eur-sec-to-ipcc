@@ -2,11 +2,11 @@
 Script to convert networks from PyPSA-Eur-Sec v0.5.0 to data format used in the
 IAMC database
 """
- 
-import numpy as np
+
 import pypsa
 import openpyxl
 import pandas as pd
+import numpy as np
 import math
 import collections
 
@@ -14,11 +14,11 @@ def select_time_period(series) :
  """
  returns the series sliced in a specified time period (summer, winter,or just all year)
  """    
- if 'Winter'in sheet  :
+ if 'Winter'in current_sheet  :
   a=pd.Series(series[winter_i:winter_e])
   b=pd.Series(series[winter_ii:winter_ee])
   return pd.concat([a,b])
- if 'summer' in sheet or 'Summer' in sheet :         
+ if 'summer' in current_sheet or 'Summer' in current_sheet :         
   return pd.Series(series[summer_i:summer_e]) 
  else :
   return series     
@@ -27,11 +27,11 @@ def select_metric(series) :
  """
  returns the peak (max), percentile 25,  percentile 50, or total sum of a series
  """
- if 'peak' in sheet :
+ if 'peak' in current_sheet :
   return series.max()
- if 'Percentile' in sheet and '50' in sheet:
+ if 'Percentile' in current_sheet and '50' in current_sheet:
   return series.quantile(0.5)
- if 'Percentile' in sheet and '25' in sheet :
+ if 'Percentile' in current_sheet and '25' in current_sheet :
   return series.quantile(0.25)
  else :
   return series.sum() 
@@ -52,12 +52,12 @@ MW2GW=0.001
 
 #original IAMC file, official template
 path = "format/IAMC_format.xlsx"
+path2 = "format/IAMC_format_onesheet.xlsx"
 
 model = "PyPSA-Eur-Sec 0.6.0"
-scenarios ={'Early neutrality scenario':'-cb25.7ex0', 
-            'Early neutrality scenario With gas constrait':'-cb25.7ex0-gasconstrained' ,
-            'Current trends':'-cb73.9ex0',
-           'Current trends With gas constrait':'-cb73.9ex0-gasconstrained'}  
+scenarios ={'Early neutrality scenario':'-cb25.7ex0',
+            'Climate neutrality scenario':'-cb45.0ex0',
+            'Current trends':''}   #defines carbon budget for each scenario
 years = [2020, 2030, 2050]  
 
 sheets={"installed_capacity":0,
@@ -104,12 +104,17 @@ sheet_var={"installed_capacity":'Installed capacity',
 for scenario in scenarios:
     #one excel file per scenario
     file = openpyxl.load_workbook(path)
-    ds_eu=[]
-    ds_eu_uk=[]
-    ds_all=[]  #To delete
+    ds_eu, ds_eu_uk, ds_all=([] for i in range(3))  #separate sheets for regions
+    
+    file2= openpyxl.load_workbook(path2)
+    target2 = file2.copy_worksheet(file2['scenarios'])
+    target2.title ='scenarios1'
+    ds2=[]
+    ds2.append(file2['scenarios1'])
+    
     
     for year in years:
-        
+            
         n=pypsa.Network('postnetworks/elec_s370_37m_lv1.0__3H-T-H-B-I-solar+p3-dist1{}_{}.nc'.format(scenarios[scenario],year))
         industry_demand=pd.read_table('resources/industrial_energy_demand_elec_s370_37m_{}.csv'.format(year),delimiter=',',index_col=0)
         costs = pd.read_csv("costs/costs_{}.csv".format(year), index_col=[0,1])
@@ -120,13 +125,12 @@ for scenario in scenarios:
         countries.insert(0,'EU')
         EU_UK = [country for country in countries if country not in ('NO','BA','ME','MK','RS','AL','CH','EU')]  #EU25+UK (EU25=EU27-Malta and Cyprus not in model)
         EU = [country for country in countries if country not in ('NO','BA','ME','MK','RS','AL','CH','GB','EU_UK')]  #EU25 (EU27-Malta and Cyprus not in model)
-        countries.insert(0,'All')  ##Delete
-        All= [country for country in countries if country not in ('EU','EU_UK')]  #Delete
-        d={}
-        n_eff_eu=collections.defaultdict(lambda: 0, d) #to keep track of efficiencies for EU
-        n_eff_eu_uk=collections.defaultdict(lambda: 0, d) #to keep track of efficiencies for EU_UK      
-        n_eff_all=collections.defaultdict(lambda: 0, d) #to keep track of efficiencies for All
-
+        countries.insert(0,'All')  #All countries being modeled
+        All= [country for country in countries if country not in ('EU','EU_UK')]  
+        n_eff_eu,n_eff_eu_uk,n_eff_all =(collections.defaultdict(lambda: 0, {}) for i in range(3)) #to keep track of efficiencies for regions
+        regions={ 'EU':[EU,ds_eu,n_eff_eu], 'EU_UK':[EU_UK,ds_eu_uk,n_eff_eu_uk], 'All': [All,ds_all,n_eff_all]}
+        ro2=2
+        
         for country in countries:
           # Prepare ds and var for the specific country 
             ds=[]
@@ -136,12 +140,12 @@ for scenario in scenarios:
                 #one datasheet per country including information from different years
                 target = file.copy_worksheet(file[sheet])
                 target.title =sheet +' '+str(country)
-              if country is 'EU' :  #Separate worksheet for EU so other values could be added as the program runs
-                ds_eu.append(file[sheet +' '+str(country)]) 
-              if country is 'EU_UK' :  #Separate worksheet for EU_UK so other values could be added as the program runs
-                ds_eu_uk.append(file[sheet +' '+str(country)])   
-              if country is 'All' :  #TO delete
-                ds_all.append(file[sheet +' '+str(country)])   
+                if country is 'EU' :  #Separate worksheet for EU so other values could be added as the program runs
+                  ds_eu.append(file[sheet +' '+str(country)]) 
+                elif country is 'EU_UK' :  #Separate worksheet for EU+UK
+                  ds_eu_uk.append(file[sheet +' '+str(country)])   
+                elif country is 'All' :  #Separate worksheet for All counties being modeled
+                  ds_all.append(file[sheet +' '+str(country)])   
               ds.append(file[sheet +' '+str(country)])  #set of worksheets for each country that is replaced each loop
               var.append({}) 
 
@@ -190,8 +194,7 @@ for scenario in scenarios:
                 
             #Capacity :Biomass (CCS)                                                                 
             var[sh]['Installed capacity|Electricity|Solid bio and waste|Primary solid biomass'] = MW2GW*((n.links.efficiency.filter(like ='solid biomass CHP').filter(like =country)
-                 *n.links.p_nom_opt.filter(like ='solid biomass CHP').filter(like =country)).sum()+(n.links.efficiency.filter(like ='solid biomass CHP CC').filter(like =country)
-                 *n.links.p_nom_opt.filter(like ='solid biomass CHP CC').filter(like =country)).sum()) 
+                 *n.links.p_nom_opt.filter(like ='solid biomass CHP').filter(like =country)).sum()) 
             var[sh]['Installed capacity|Electricity|Solid bio and waste'] = var[sh]['Installed capacity|Electricity|Solid bio and waste|Primary solid biomass']
             var[sh]['Installed capacity|Electricty|Biomass'] = var[sh]['Installed capacity|Electricity|Solid bio and waste']
             
@@ -438,9 +441,12 @@ for scenario in scenarios:
             ######  Fill energy generation sheets #####
             #############################################     
             ###Energy generation: total,peaks,and percentiles (MWh -> GWh)
+            global current_sheet
+
             for sheet in sheets.keys(): 
              if sheet in ("Yearly_generation_supply","Winter_peak_generation","summer_peak_generation","Percentile50_generation","Percentile25_generation"):
                 sh=sheets[sheet]
+                current_sheet = sheet
                 
                 #Energy generation : Solar PV (rooftop, ground)               
                 var[sh][sheet_var[sheet]+'|Electricity|Solar|Rooftop PV'] = MW2GW*h*select_metric(select_time_period(n.generators_t.p.filter(like ='solar rooftop').filter(like =country).sum(axis=1)))
@@ -558,7 +564,7 @@ for scenario in scenarios:
              if sheet in ("Percentile_25_consumpt","Percentile_50_consumpt","Summer_peak_consumpt",
                              "Winter_peak_consumpt") :
                 sh=sheets[sheet]
-            
+                current_sheet = sheet
                 #Hourly power consumption : Buildings, Industry, Transportation  (MWh -> GWh)
             
                 var[sh][sheet_var[sheet]+'|Electricity'] = MW2GW*h*select_metric(select_time_period((n.loads_t.p[[i for i in n.loads.index if i==country+'0 0']]).sum(axis=1)))
@@ -744,84 +750,77 @@ for scenario in scenarios:
               col=[c for c in ds[sh][1] if c.value=='Y_'+str(year_sub)][0].column
               for v in var[sh].keys():
                  ro=[r for r in ds[sh]['D'] if r.value==v][0].row
-                 ds[sh].cell(row=ro, column=col).value = round(var[sh][v],3)
-                 if country in EU:
-                     if country is 'EU':    #sets all initial values for EU sheet as zero
-                        ds_eu[sh].cell(row=ro, column=col).value=0
-                     else:                    #sums all EU country values for EU sheet
-                        if  math.isnan(var[sh][v]):
+                                    
+                 if  math.isnan(var[sh][v]):    # sets 'nan' values to zero so they can be summed for regions (EU,..)
                             var[sh][v]=0
-                            if 'Efficiency' in v :
-                              n_eff_eu[v] +=1 
-                        ds_eu[sh].cell(row=ro, column=col).value +=round(var[sh][v],3)                      
-                 if country in EU_UK:
-                     if country is 'EU_UK':    #sets all initial values for EU_UK sheet as zero
-                        ds_eu_uk[sh].cell(row=ro, column=col).value=0
-                     else:                    #sums all EU_UK country values for EU_UK sheet
-                        if  math.isnan(var[sh][v]):
-                            var[sh][v]=0
-                            if 'Efficiency' in v :
-                              n_eff_eu_uk[v] +=1 
-                        ds_eu_uk[sh].cell(row=ro, column=col).value +=round(var[sh][v],3)
-                 if country in All:  #To delete
-                     if country is 'All':    #sets all initial values for All sheet as zero
-                        ds_all[sh].cell(row=ro, column=col).value=0
-                     else:                   #sums all country values for All sheet
-                        if  math.isnan(var[sh][v]):
-                            var[sh][v]=0
-                            if 'Efficiency' in v :
-                              n_eff_all[v] +=1
-                        ds_all[sh].cell(row=ro, column=col).value +=round(var[sh][v],3)       
- 
+                            if 'Efficiency' in v :   #keeps track how. many countries don't have a certain technology
+                               for region in regions.keys():
+                                   if country in regions[region][0]:  regions[region][2][v] +=1 
+                                        
+                 ds[sh].cell(row=ro, column=col).value = round(var[sh][v],3) 
+                 
+                 if country is ['EU','EU_UK','All']:   #sets all initial values for EU,EU_UK,All sheet as zero
+                            regions[country][1][sh].cell(row=ro, column=col).value=0
+                  
+                 for region in regions.keys():          #sums country values for EU, EU_UK, All sheet
+                            if country in regions[region][0]: 
+                                    regions[region][1][sh].cell(row=ro, column=col).value +=round(var[sh][v],3)  
+
                  ds[sh].cell(row=ro, column=1).value = model
                  ds[sh].cell(row=ro, column=2).value = scenario
-                 ds[sh].cell(row=ro, column=3).value = country #region
+                 ds[sh].cell(row=ro, column=3).value = country 
+             
+            
+            if country not in ['All','ME','RS','AL','BA','MK']: 
+             col=[c for c in ds2[0][1] if c.value==(year)][0].column
+             for sheet in sheets.keys() :
+              sh=sheets[sheet]   
+              for v in var[sh].keys():
+                 ro=[r for r in ds[sh]['D'] if r.value==v][0].row
+                 ds2[0].cell(row=ro2, column=col).value = var[sh][v]     
+                 ds2[0].cell(row=ro2, column=1).value = model
+                 ds2[0].cell(row=ro2, column=2).value = scenario
+                 ds2[0].cell(row=ro2, column=3).value = country_names[country]
+                 ds2[0].cell(row=ro2, column=4).value = v
+                 ds2[0].cell(row=ro2, column=5).value = ds[sh].cell(row=ro, column=6).value 
+                 ro2+=1
+                
+                
+                
                 
         ### EU and EU_UK adjustments 
         
         #Efficiencies have been summed, they need to be devided by the number of countries
-        #that had a value for the efficiency (EU list has 25 countries plus itself, EU_UK list has 26 plus itself ...)
+        #that had a value for the efficiency (i.e., only 3 countries have coal in 2040, so its divided by 3)
         sh=sheets['Efficiency_supply'] 
-        col=[c for c in ds_eu[sh][1] if c.value=='Y_'+str(year_sub)][0].column
-        for v in var[sh].keys():
-          ro=[r for r in ds_eu[sh]['D'] if r.value==v][0].row
-          if n_eff_eu[v] !=25 : ds_eu[sh].cell(row=ro, column=col).value/= (25-n_eff_eu[v])
-        
-        col=[c for c in ds_eu_uk[sh][1] if c.value=='Y_'+str(year_sub)][0].column
-        for v in var[sh].keys():
-          ro=[r for r in ds_eu_uk[sh]['D'] if r.value==v][0].row
-          if (n_eff_eu_uk[v]+n_eff_eu[v]) !=26 : ds_eu_uk[sh].cell(row=ro, column=col).value/= (26-n_eff_eu[v]-n_eff_eu_uk[v])
-            
-        col=[c for c in ds_all[sh][1] if c.value=='Y_'+str(year_sub)][0].column
-        for v in var[sh].keys():
-          ro=[r for r in ds_all[sh]['D'] if r.value==v][0].row
-          if (n_eff_eu_uk[v]+n_eff_eu[v]+n_eff_all[v]) !=33 : ds_all[sh].cell(row=ro, column=col).value/= (33-n_eff_all[v]-n_eff_eu[v]-n_eff_eu_uk[v])
+        for region in regions.keys():
+         col=[c for c in regions[region][1][sh][1] if c.value=='Y_'+str(year_sub)][0].column
+         for v in var[sh].keys():
+           ro=[r for r in regions[region][1][sh]['D'] if r.value==v][0].row
+           if regions[region][2][v] !=len(regions[region][0]) : regions[region][1][sh].cell(row=ro, column=col).value/= (len(regions[region][0])-regions[region][2][v])
+
                 
-        sh=sheets['Demand_final_energy']    #Aviation fuek demand is a single bus for all countries (not just EU27+Uk) but it's added to EU_UK sheet for best accuracy (TODO: enhance accuracy)
-        col=[c for c in ds_eu_uk[sh][1] if c.value=='Y_'+str(year_sub)][0].column
-        ro=[r for r in ds_eu[sh]['D'] if r.value=='Final energy consumption|Transportation|Aviation|Liquids|Fossil'][0].row
-        ds_eu_uk[sh].cell(row=ro, column=col).value=MWh2TJ*h*n.loads_t.p.filter(like ='kerosene for aviation').sum().sum()                                
-        ro=[r for r in ds_eu[sh]['D'] if r.value=='Final energy consumption|Transportation'][0].row
-        ds_eu_uk[sh].cell(row=ro, column=col).value+=MWh2TJ*h*n.loads_t.p.filter(like ='kerosene for aviation').sum().sum()                     
-                         
+        sh=sheets['Demand_final_energy']    #Aviation fuel demand is a single bus for all countries (not just EU27+Uk) but it's added to EU_UK sheet for best accuracy (TODO: enhance accuracy)
+        for region in ['EU_UK', 'All']:
+          col=[c for c in regions[region][1][sh][1] if c.value=='Y_'+str(year_sub)][0].column
+          ro=[r for r in regions[region][1][sh]['D'] if r.value=='Final energy consumption|Transportation|Aviation|Liquids|Fossil'][0].row
+          regions[region][1][sh].cell(row=ro, column=col).value=MWh2TJ*h*n.loads_t.p.filter(like ='kerosene for aviation').sum().sum()                                
+          ro=[r for r in regions[region][1][sh]['D'] if r.value=='Final energy consumption|Transportation'][0].row
+          regions[region][1][sh].cell(row=ro, column=col).value+=MWh2TJ*h*n.loads_t.p.filter(like ='kerosene for aviation').sum().sum()                     
+                        
         #Interconnect capacities are added twice (once for each country connected to the transmission line)
         for sheet in ('installed_capacity',"Yearly_generation_supply","Winter_peak_generation",
                           "summer_peak_generation","Percentile50_generation","Percentile25_generation") :
               sh=sheets[sheet] 
-              col=[c for c in ds_eu[sh][1] if c.value=='Y_'+str(year_sub)][0].column
-              ro=[r for r in ds_eu[sh]['D'] if 'Flexibility|Interconnect Importing Capacity' in r.value][0].row
-              ds_eu[sheets[sheet]].cell(row=ro, column=col).value/= 2
-            
-              col=[c for c in ds_eu_uk[sh][1] if c.value=='Y_'+str(year_sub)][0].column
-              ro=[r for r in ds_eu_uk[sh]['D'] if 'Flexibility|Interconnect Importing Capacity' in r.value][0].row
-              ds_eu_uk[sheets[sheet]].cell(row=ro, column=col).value/= 2
-                
-              col=[c for c in ds_all[sh][1] if c.value=='Y_'+str(year_sub)][0].column   #To delete
-              ro=[r for r in ds_all[sh]['D'] if 'Flexibility|Interconnect Importing Capacity' in r.value][0].row
-              ds_all[sheets[sheet]].cell(row=ro, column=col).value/= 2  
-            
+              for region in regions.keys():
+                col=[c for c in regions[region][1][sh][1] if c.value=='Y_'+str(year_sub)][0].column
+                ro=[r for r in regions[region][1][sh]['D'] if 'Flexibility|Interconnect Importing Capacity' in r.value][0].row
+                regions[region][1][sheets[sheet]].cell(row=ro, column=col).value/= 2
+     
+        
      #removes empty sheets from original file   
     for sheet in sheet_var.keys() :      
-         del file[sheet]
+         del file[sheet]        
      # Save file for current scenario
-    file.save("tables/IAM_{}.xlsx".format(scenario))
+    #file.save("results/IAM_{}.xlsx".format(scenario))
+    file2.save("results/IAM_onesheet_c_{}.xlsx".format(scenario))
