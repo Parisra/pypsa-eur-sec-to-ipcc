@@ -87,16 +87,14 @@ for scenario in scenarios:
             Capacity : Solar PV, onshore and offshore wind
             """
             #MW -> GW
-            var['Capacity|Electricity|Solar|PV'] =0.001*n.generators.p_nom_opt[country + ' solar'] if country + ' solar' in n.generators.index else 0
+            var['Capacity|Electricity|Solar|PV'] =0.001*(n.generators.p_nom_opt.filter(like ='solar').filter(like =country).sum()-
+                                                          n.generators.p_nom_opt.filter(like ='solar thermal').filter(like =country).sum())
             var['Capacity|Electricity|Solar'] = var['Capacity|Electricity|Solar|PV']
-            var['Capacity |Electricity|Solar|PV|Rooftop PV'] = 0.5 * var['Capacity|Electricity|Solar|PV']
-            var['Capacity|Electricity|Solar|PV|Utility-scale PV'] = 0.5 * var['Capacity|Electricity|Solar|PV']
-            if country in wind_split:
-                var['Capacity|Electricity|Wind|Onshore']=0.001*n.generators.p_nom_opt[[i for i in n.generators.index if country in i and 'onwind' in i]].sum() 
-                var['Capacity|Electricity|Wind|Offshore']=0.001*n.generators.p_nom_opt[[i for i in n.generators.index if country in i and 'offwind' in i]].sum() 
-            else:
-                var['Capacity|Electricity|Wind|Onshore']=0.001*n.generators.p_nom_opt[country + ' onwind'] if country + ' onwind' in n.generators.index else 0
-                var['Capacity|Electricity|Wind|Offshore']=0.001*n.generators.p_nom_opt[country + ' offwind'] if country + ' offwind' in n.generators.index else 0
+            var['Capacity |Electricity|Solar|PV|Rooftop PV'] = 0.001*n.generators.p_nom_opt.filter(like ='solar rooftop').filter(like =country).sum()
+            var['Capacity|Electricity|Solar|PV|Utility-scale PV'] = var['Capacity|Electricity|Solar|PV'] - var['Capacity |Electricity|Solar|PV|Rooftop PV']
+
+            var['Capacity|Electricity|Wind|Onshore']=0.001*n.generators.p_nom_opt.filter(like ='onwind').filter(like =country).sum() 
+            var['Capacity|Electricity|Wind|Offshore']=0.001*n.generators.p_nom_opt.filter(like ='offwind').filter(like =country).sum() 
             var['Capacity|Electricity|Wind']=var['Capacity|Electricity|Wind|Onshore']+var['Capacity|Electricity|Wind|Offshore']
 
 
@@ -104,74 +102,89 @@ for scenario in scenarios:
             Capacity : Nuclear, Coal, Lignite, OCGT, CCGT, Biomass
             """
             #MW -> GW
-            var['Capacity|Electricity|Nuclear'] =0.001*n.links.efficiency[country + ' nuclear']*n.links.p_nom_opt[country + ' nuclear'] if country + ' nuclear' in n.links.index else 0
-            var['Capacity|Electricity|Coal|w/o CCS'] = 0.001*n.links.efficiency[country + ' coal']*n.links.p_nom_opt[country + ' coal'] if country + ' coal' in n.links.index else 0
-            var['Capacity|Electricity|Coal|w/o CCS'] += 0.001*n.links.efficiency[country + ' lignite']*n.links.p_nom_opt[country + ' lignite'] if country + ' lignite' in n.links.index else 0
+            var['Capacity|Electricity|Nuclear'] =0.001*((n.links.efficiency.filter(like ='nuclear').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='nuclear').filter(like =country)).sum())
+            
+            var['Capacity|Electricity|Coal|w/o CCS'] = ((n.links.efficiency.filter(like ='coal').filter(like =country)
+                *n.links.p_nom_opt.filter(like ='coal').filter(like =country)).sum())
+            var['Capacity|Electricity|Coal|w/o CCS'] += 0.001*((n.links.efficiency.filter(like ='lignite').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='lignite').filter(like =country)).sum())
             var['Capacity|Electricity|Coal'] =var['Capacity|Electricity|Coal|w/o CCS'] 
-            var['Capacity|Electricity|Gas|w/o CCS'] = 0.001* n.links.efficiency[country + ' OCGT']*n.links.p_nom_opt[country + ' OCGT'] if country + ' OCGT' in n.links.index else 0
-            var['Capacity|Electricity|Gas|w/o CCS'] += 0.001*n.links.efficiency[country + ' CCGT']*n.links.p_nom_opt[country + ' CCGT'] if country + ' CCGT' in n.links.index else 0
-            var['Capacity|Electricity|Gas'] = var['Capacity|Electricity|Gas|w/o CCS']
-            var['Capacity|Electricity|Biomass|w/o CCS'] = 0.001* n.links.efficiency[country + ' biomass EOP']*n.links.p_nom_opt[country + ' biomass EOP'] if country + ' biomass EOP' in n.links.index else 0
-            var['Capacity|Electricity|Biomass|w/o CCS'] += 0.001* n.links.efficiency[country + ' central biomass CHP electric']*n.links.p_nom_opt[country + ' central biomass CHP electric'] if country + ' central biomass CHP electric' in n.links.index else 0
-            var['Capacity|Electricity|Biomass'] = var['Capacity|Electricity|Biomass|w/o CCS']
+            
+            var['Capacity|Electricity|Gas'] = 0.001*((n.links.efficiency.filter(like ='OCGT').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='OCGT').filter(like =country)).sum())
+            var['Capacity|Electricity|Gas'] += 0.001*((n.links.efficiency.filter(like ='CCGT').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='CCGT').filter(like =country)).sum())
+            var['Capacity|Electricity|Gas'] += 0.001*((n.links.efficiency.filter(like ='gas CHP').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='gas CHP').filter(like =country)).sum())
+            var['Capacity|Electricity|Gas|w/ CCS'] = 0.001*((n.links.efficiency.filter(like ='gas CHP CC').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='gas CHP CC').filter(like =country)).sum() )                                                 
+            var['Capacity|Electricity|Gas|w/o CCS'] = (var['Capacity|Electricity|Gas'] -
+                                         var['Capacity|Electricity|Gas|w/ CCS']  )                                              
+                                                              
+            var['Capacity|Electricity|Biomass'] = 0.001*((n.links.efficiency.filter(like ='solid biomass CHP').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='solid biomass CHP').filter(like =country)).sum())
+            var['Capacity|Electricity|Biomass|w/ CCS']= 0.001*((n.links.efficiency.filter(like ='solid biomass CHP CC').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='solid biomass CHP CC').filter(like =country)).sum())   
+            var['Capacity|Electricity|Biomass|w/o CCS'] = (var['Capacity|Electricity|Biomass']    
+              -var['Capacity|Electricity|Biomass|w/ CCS'])
             
             """
             Capacity : hydro (reservoir, ror)
             """
             #MW -> GW
-            var['Capacity|Electricity|Hydro'] = 0.001*n.storage_units.p_nom_opt[country + ' hydro'] if country + ' hydro' in n.storage_units.index else 0
-            var['Capacity|Electricity|Hydro'] += 0.001*n.generators.p_nom_opt[country + ' ror'] if country + ' ror' in n.generators.index else 0
-            
+            var['Capacity|Electricity|Hydro'] = 0.001*n.generators.p_nom_opt.filter(like ='ror').filter(like =country).sum()
+            var['Capacity|Electricity|Hydro'] += 0.001*n.storage_units.p_nom_opt.filter(like ='hydro').filter(like =country).sum()
             """
             Electricity : Solar PV, onshore and offshore wind
             """
             #MWh -> EJ
-            var['Secondary Energy|Electricity|Solar|PV'] = 3.6e-9*n.generators_t.p[country + ' solar'].sum() if country + ' solar' in n.generators.index else 0
+            var['Secondary Energy|Electricity|Solar|PV'] =3.6e-9*(n.generators_t.p.filter(like ='solar').filter(like =country).sum().sum())
             var['Secondary Energy|Electricity|Solar'] = var['Secondary Energy|Electricity|Solar|PV']
-            var['Secondary Energy|Electricity|Solar|PV|Rooftop PV'] = 0.5 * var['Secondary Energy|Electricity|Solar|PV'] 
-            var['Secondary Energy|Electricity|Solar|PV|Utility-scale PV'] = 0.5 * var['Secondary Energy|Electricity|Solar|PV'] 
+            var['Secondary Energy|Electricity|Solar|PV|Rooftop PV'] = 3.6e-9*(n.generators_t.p.filter(like ='solar rooftop').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Solar|PV|Utility-scale PV'] = var['Secondary Energy|Electricity|Solar|PV'] - var['Secondary Energy|Electricity|Solar|PV|Rooftop PV']
+
+            var['Secondary Energy|Electricity|Wind|Onshore'] = 3.6e-9*(n.generators_t.p.filter(like ='onwind').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Wind|Offshore'] = 3.6e-9*(n.generators_t.p.filter(like ='offwind').filter(like =country).sum().sum())
             
-            if country in wind_split:
-                var['Secondary Energy|Electricity|Wind|Onshore'] = 3.6e-9*n.generators_t.p[[i for i in n.generators.index if country in i and 'onwind' in i]].sum().sum()
-                var['Secondary Energy|Electricity|Wind|Offshore'] = 3.6e-9*n.generators_t.p[[i for i in n.generators.index if country in i and 'offwind' in i]].sum().sum()
-            else:
-                var['Secondary Energy|Electricity|Wind|Onshore'] = 3.6e-9*n.generators_t.p[country + ' onwind'].sum() if country + ' onwind' in n.generators.index else 0
-                var['Secondary Energy|Electricity|Wind|Offshore'] = 3.6e-9*n.generators_t.p[country + ' offwind'].sum() if country + ' offwind' in n.generators.index else 0
             var['Secondary Energy|Electricity|Wind'] = var['Secondary Energy|Electricity|Wind|Onshore'] + var['Secondary Energy|Electricity|Wind|Offshore']
             
             """
             Electricity : Nuclear, Coal, Lignite, OCGT, CCGT, biomass
             """
             #MWh -> EJ
-            var['Secondary Energy|Electricity|Nuclear'] = -3.6e-9*n.links_t.p1[country + ' nuclear'].sum() if country + ' nuclear' in n.links.index else 0
-            var['Secondary Energy|Electricity|Coal|w/o CCS'] =- 3.6e-9*n.links_t.p1[country + ' coal'].sum() if country + ' coal' in n.links.index else 0
-            var['Secondary Energy|Electricity|Coal|w/o CCS'] += -3.6e-9*n.links_t.p1[country + ' lignite'].sum() if country + ' lignite' in n.links.index else 0
-            var['Secondary Energy|Electricity|Gas|w/o CCS'] = -3.6e-9*n.links_t.p1[country + ' OCGT'].sum() if country + ' OCGT' in n.links.index else 0
-            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*n.links_t.p1[country + ' CCGT'].sum() if country + ' CCGT' in n.links.index else 0
-            var['Secondary Energy|Electricity|Biomass|w/o CCS'] = -3.6e-9*n.links_t.p1[country + ' biomass EOP'].sum() if country + ' biomass EOP' in n.links.index else 0
-            var['Secondary Energy|Electricity|Biomass|w/o CCS'] += -3.6e-9*n.links_t.p1[country + ' central biomass CHP electric'].sum() if country + ' central biomass CHP electric' in n.links.index else 0
-            
+            var['Secondary Energy|Electricity|Nuclear'] = -3.6e-9*(n.links_t.p1.filter(like ='nuclear').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Coal|w/o CCS'] =- 3.6e-9*(n.links_t.p1.filter(like ='coal').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Coal|w/o CCS'] += -3.6e-9*(n.links_t.p1.filter(like ='lignite').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='OCGT').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*(n.links_t.p1.filter(like ='CCGT').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*(n.links_t.p1.filter(like ='gas CHP').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Biomass|w/o CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='biomass CHP').filter(like =country).sum().sum())
+                                                                 
+            var['Secondary Energy|Electricity|Gas|w/ CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='gas CHP CC').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Biomass|w/ CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='biomass CHP CC').filter(like =country).sum().sum())           
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] -= var['Secondary Energy|Electricity|Gas|w/ CCS']
+            var['Secondary Energy|Electricity|Biomass|w/o CCS'] -= var['Secondary Energy|Electricity|Biomass|w/ CCS']
             """
             Electricity : Hydro (reservoir, ror)
             """
             #MWh -> EJ
-            var['Secondary Energy|Electricity|Hydro'] = 3.6e-9*n.storage_units_t.p[country + ' hydro'].sum() if country + ' hydro' in n.storage_units.index else 0
-            var['Secondary Energy|Electricity|Hydro'] += 3.6e-9*n.generators_t.p[country + ' ror'].sum() if country + ' ror' in n.generators.index else 0
+            var['Secondary Energy|Electricity|Hydro'] = 3.6e-9*(n.storage_units_t.p.filter(like ='hydro').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Hydro'] += 3.6e-9*(n.generators_t.p.filter(like ='ror').filter(like =country).sum().sum())
 
             """
             Capacity : storage (PHS, battery, H2 storage)
             """
             #MWh to GWh
-            var['Capacity|Electricity|Storage|Pumped Hydro Storage'] = 0.001 *n.storage_units.p_nom_opt[country + ' PHS'] if country + ' PHS' in n.storage_units.index else 0
-            var['Capacity|Electricity|Storage|Battery Capacity|Utility-scale Battery'] = 0.001 *n.stores.e_nom_opt[country + ' battery'] if country + ' battery' in n.stores.index else 0
-            var['Capacity|Electricity|Storage|Battery Capacity'] = var['Capacity|Electricity|Storage|Battery Capacity|Utility-scale Battery']
-            #variable Hydrogen Storage Capacity not included in EU Climate Advisory Board Scenario Explorer
-            #var['Capacity|Electricity|Storage|Hydrogen Storage Capacity|overground'] = 0.001 *n.stores.e_nom_opt[country + ' H2 Store tank'] if country + ' H2 Store tank' in n.stores.index else 0
+            var['Capacity|Electricity|Storage|Pumped Hydro Storage'] = 0.001*(n.storage_units.p_nom_opt.filter(like ='PHS').filter(like =country).sum())
+            var['Capacity|Electricity|Storage|Battery Capacity|Utility-scale Battery '] = 0.001*((n.links.efficiency.filter(like ='battery charger')
+                 *n.links.p_nom_opt.filter(like ='battery charger')).sum()-(n.links.efficiency.filter(like ='home battery charger')
+                 *n.links.p_nom_opt.filter(like ='home battery charger')).sum())
+            var['Capacity|Electricity|Storage|Battery Capacity'] = 0.001*((n.links.efficiency.filter(like ='battery charger')
+                 *n.links.p_nom_opt.filter(like ='battery charger')).sum())
+            #var['Capacity|Electricity|Storage|Hydrogen Storage Capacity|overground'] = 0.001 *(n.stores.e_nom_opt.filter(like ='H2').filter(like =country).sum()/168) #assume one week charge time for H2 storage
             #var['Capacity|Electricity|Storage|Hydrogen Storage Capacity|underground'] = 0.001 *n.stores.e_nom_opt[country + ' H2 Store underground'] if country + ' H2 Store underground' in n.stores.index else 0
-            #var['Capacity|Electricity|Storage|Hydrogen Storage Capacity'] = (var['Capacity|Electricity|Storage|Hydrogen Storage Capacity|overground']
-            #                                                                + var['Capacity|Electricity|Storage|Hydrogen Storage Capacity|underground'])
-            var['Capacity|Electricity|Storage|Hydrogen Storage Capacity'] = (0.001 *n.stores.e_nom_opt[country + ' H2 Store tank'] if country + ' H2 Store tank' in n.stores.index else 0
-            + 0.001 *n.stores.e_nom_opt[country + ' H2 Store underground'] if country + ' H2 Store underground' in n.stores.index else 0)
+            var['Capacity|Electricity|Storage|Hydrogen Storage Capacity'] = 0.001 *(n.stores.e_nom_opt.filter(like ='H2').filter(like =country).sum()/168)
             var['Capacity|Electricity|Storage Capacity'] = ( var['Capacity|Electricity|Storage|Pumped Hydro Storage']
                                                             +  var['Capacity|Electricity|Storage|Battery Capacity']
                                                             + var['Capacity|Electricity|Storage|Hydrogen Storage Capacity'])
@@ -181,38 +194,35 @@ for scenario in scenarios:
             """
             # ELectric capacity
             # MW to Gw
-            var['Capacity|Heating|Heat pumps'] = 0.001*n.links.p_nom_opt[country + ' central heat pump'] if country + ' central heat pump' in n.links.index else 0
-            var['Capacity|Heating|Heat pumps'] += 0.001*n.links.p_nom_opt[country + ' decentral heat pump'] if country + ' decentral heat pump' in n.links.index else 0
-            var['Capacity|Heating|Electric boilers'] = 0.001*n.links.p_nom_opt[country + ' central resistive heater'] if country + ' central resistive heater' in n.links.index else 0
-            var['Capacity|Heating|Electric boilers'] += 0.001*n.links.p_nom_opt[country + ' decentral resistive heater'] if country + ' decentral resistive heater' in n.links.index else 0
-            var['Capacity|Gas|Synthetic'] = 0.001*n.links.p_nom_opt[country + ' Sabatier'] if country + ' Sabatier' in n.links.index else 0
+            var['Capacity|Heating|Heat pumps'] = 0.001*((n.links_t.efficiency.filter(like ='heat pump').filter(like =country).mean()
+                 *n.links.p_nom_opt.filter(like ='heat pump').filter(like =country)).sum())
+            var['Capacity|Heating|Electric boilers'] = 0.001*((n.links.efficiency.filter(like ='resistive heater').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='resistive heater').filter(like =country)).sum())
+            var['Capacity|Gas|Synthetic'] = 0.001*((n.links.efficiency.filter(like ='Sabatier').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='Sabatier').filter(like =country)).sum())
             
             """
             Final Energy (heating) : heat pumps, heat resistors, Sabatier (synthetic gas)
             """
             #MWh -> EJ
             #50/50 services/domestic
-            var['Final Energy|Residential and Commercial|Commercial|Heating|Heat pumps'] = - 3.6e-9 * 0.5 * n.links_t.p1[country + ' central heat pump'].sum() if country + ' central heat pump' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Commercial|Heating|Heat pumps'] += - 3.6e-9 * 0.5 * n.links_t.p1[country + ' decentral heat pump'].sum() if country + ' decentral heat pump' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Residential|Heating|Heat pumps'] = - 3.6e-9 * 0.5 * n.links_t.p1[country + ' central heat pump'].sum() if country + ' central heat pump' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Residential|Heating|Heat pumps'] += - 3.6e-9  *0.5 * n.links_t.p1[country + ' decentral heat pump'].sum() if country + ' decentral heat pump' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Commercial|Heating|Electric boilers'] = - 3.6e-9 * 0.5 * n.links_t.p1[country + ' central resistive heater'].sum() if country + ' central resistive heater' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Commercial|Heating|Electric boilers'] += - 3.6e-9 * 0.5 * n.links_t.p1[country + ' decentral resistive heater'].sum() if country + ' decentral resistive heater' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Residential|Heating|Electric boilers'] = - 3.6e-9 * 0.5 * n.links_t.p1[country + ' central resistive heater'].sum() if country + ' central resistive heater' in n.links.index else 0
-            var['Final Energy|Residential and Commercial|Residential|Heating|Electric boilers'] += - 3.6e-9 * 0.5 * n.links_t.p1[country + ' decentral resistive heater'].sum() if country + ' decentral resistive heater' in n.links.index else 0
-            var['Final Energy|Gas|Synthetic'] = - 3.6e-9*n.links_t.p1[country + ' Sabatier'].sum() if country + ' Sabatier' in n.links.index else 0
+            var['Final Energy|Residential and Commercial|Commercial|Heating|Heat pumps'] = - 3.6e-9 * 0.5 * (n.links_t.p1.filter(like ='heat pump').filter(like='residentioal').filter(like =country).sum().sum())
+            var['Final Energy|Residential and Commercial|Residential|Heating|Heat pumps'] = - 3.6e-9 * 0.5 * (n.links_t.p1.filter(like ='heat pump').filter(like='services').filter(like =country).sum().sum())
+            var['Final Energy|Residential and Commercial|Commercial|Heating|Electric boilers'] = - 3.6e-9 * (n.links_t.p1.filter(like ='resistive heater').filter(like='residentioal').filter(like =country).sum().sum())
+            var['Final Energy|Residential and Commercial|Residential|Heating|Electric boilers'] = - 3.6e-9 * (n.links_t.p1.filter(like ='resistive heater').filter(like='services').filter(like =country).sum().sum())
+            var['Final Energy|Gas|Synthetic'] = - 3.6e-9*n.links_t.p1.filter(like ='Sabatier').filter(like =country).sum().sum()
             
             """
             Capacity : Electrolysis
             """
             #MW to GW
-            var['Capacity|Hydrogen|Electricity'] = 0.001*n.links.p_nom_opt[country + ' H2 Electrolysis']*n.links.efficiency[country + ' H2 Electrolysis'] if country + ' H2 Electrolysis' in n.links.index else 0
-
+            var['Capacity|Hydrogen|Electricity'] = 0.001*((n.links.efficiency.filter(like ='H2 Electrolysis').filter(like =country)
+                 *n.links.p_nom_opt.filter(like ='H2 Electrolysis').filter(like =country)).sum())  
             """
             Hydrogen production
             """
             #MWh to EJ
-            var['Secondary Energy|Hydrogen|Electricity'] = -3.6e-9*n.links_t.p1[country + ' H2 Electrolysis'].sum() if country + ' H2 Electrolysis' in n.links.index else 0
+            var['Secondary Energy|Hydrogen|Electricity'] = -3.6e-9*(n.links_t.p1.filter(like ='H2 Electrolysis').filter(like =country).sum().sum())
             
             """
             Capital cost and Lifetime 
