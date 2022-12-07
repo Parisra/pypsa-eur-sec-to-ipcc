@@ -19,6 +19,8 @@ literature_reference = "Pedersen, T. T., Gøtske, E. K., Dvorak, A., Andresen, G
 climate_target = 21 # CO2 budget
 
 
+wind_split = ['DE', 'ES', 'FI', 'FR', 'GB', 'IT', 'NO', 'PL', 'RO', 'SE']
+
 scenarios={'Base_1.5':'postnetworks/elec_s370_37m_lv1.0__3H-T-H-B-I-solar+p3-dist1-cb25.7ex0_',
             'Gaslimit_1.5':'postnetworks/elec_s370_37m_lv1.0__3H-T-H-B-I-solar+p3-dist1-cb25.7ex0-gasconstrained_',
             'Base_2':'postnetworks/elec_s370_37m_lv1.0__3H-T-H-B-I-solar+p3-dist1-cb73.9ex0_',
@@ -30,6 +32,11 @@ output_folder = 'results/'
 
 years = [2020, 2025, 2030, 2035, 2040, 2045, 2050]
 
+
+countries = ['AT','BE','BG','CH','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HR',
+             'HU','IT','LT','LU','LV','NO','PL','PT','RO','SE','SI','SK','IE', 'NL',
+             #'RS','BA'
+             ] 
 
 iso2name={'AT':'Austria',
           'BE':'Belgium',
