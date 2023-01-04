@@ -73,6 +73,7 @@ for scenario in scenarios:
     ds = file['data'] #data sheet
     for year in years:
         n = pypsa.Network(f"{scenarios[scenario]}{year}.nc")
+        h=int(scenarios[scenario][str.find(scenarios[scenario],'-')+1 : str.find(scenarios[scenario], 'H')])           #hourly resolution
         costs = pd.read_csv(f"costs/costs_{year}.csv", index_col=[0,1])
         
         col=[c for c in ds[1] if c.value==year][0].column
@@ -206,13 +207,13 @@ for scenario in scenarios:
             Electricity : Solar PV, onshore and offshore wind
             """
             #MWh -> EJ
-            var['Secondary Energy|Electricity|Solar|PV'] =3.6e-9*(n.generators_t.p.filter(like ='solar').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Solar|PV'] =3.6e-9*h*(n.generators_t.p.filter(like ='solar').filter(like =country).sum().sum())
             var['Secondary Energy|Electricity|Solar'] = var['Secondary Energy|Electricity|Solar|PV']
-            var['Secondary Energy|Electricity|Solar|PV|Rooftop PV'] = 3.6e-9*(n.generators_t.p.filter(like ='solar rooftop').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Solar|PV|Rooftop PV'] = 3.6e-9*h*(n.generators_t.p.filter(like ='solar rooftop').filter(like =country).sum().sum())
             var['Secondary Energy|Electricity|Solar|PV|Utility-scale PV'] = var['Secondary Energy|Electricity|Solar|PV'] - var['Secondary Energy|Electricity|Solar|PV|Rooftop PV']
 
-            var['Secondary Energy|Electricity|Wind|Onshore'] = 3.6e-9*(n.generators_t.p.filter(like ='onwind').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Wind|Offshore'] = 3.6e-9*(n.generators_t.p.filter(like ='offwind').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Wind|Onshore'] = 3.6e-9*h*(n.generators_t.p.filter(like ='onwind').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Wind|Offshore'] = 3.6e-9*h*(n.generators_t.p.filter(like ='offwind').filter(like =country).sum().sum())
             
             var['Secondary Energy|Electricity|Wind'] = var['Secondary Energy|Electricity|Wind|Onshore'] + var['Secondary Energy|Electricity|Wind|Offshore']
             
@@ -220,25 +221,46 @@ for scenario in scenarios:
             Electricity : Nuclear, Coal, Lignite, OCGT, CCGT, biomass
             """
             #MWh -> EJ
-            var['Secondary Energy|Electricity|Nuclear'] = -3.6e-9*(n.links_t.p1.filter(like ='nuclear').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Coal|w/o CCS'] =- 3.6e-9*(n.links_t.p1.filter(like ='coal').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Coal|w/o CCS'] += -3.6e-9*(n.links_t.p1.filter(like ='lignite').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Gas|w/o CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='OCGT').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*(n.links_t.p1.filter(like ='CCGT').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*(n.links_t.p1.filter(like ='gas CHP').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Biomass|w/o CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='biomass CHP').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Nuclear'] = -3.6e-9*h*(n.links_t.p1.filter(like ='nuclear').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Coal|w/o CCS'] =- 3.6e-9*h*(n.links_t.p1.filter(like ='coal').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Coal|w/o CCS'] += -3.6e-9*h*(n.links_t.p1.filter(like ='lignite').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] = -3.6e-9*h*(n.links_t.p1.filter(like ='OCGT').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*h*(n.links_t.p1.filter(like ='CCGT').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Gas|w/o CCS'] += -3.6e-9*h*(n.links_t.p1.filter(like ='gas CHP').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Biomass|w/o CCS'] = -3.6e-9*h*(n.links_t.p1.filter(like ='biomass CHP').filter(like =country).sum().sum())
                                                                  
-            var['Secondary Energy|Electricity|Gas|w/ CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='gas CHP CC').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Biomass|w/ CCS'] = -3.6e-9*(n.links_t.p1.filter(like ='biomass CHP CC').filter(like =country).sum().sum())           
+            var['Secondary Energy|Electricity|Gas|w/ CCS'] = -3.6e-9*h*(n.links_t.p1.filter(like ='gas CHP CC').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Biomass|w/ CCS'] = -3.6e-9*h*(n.links_t.p1.filter(like ='biomass CHP CC').filter(like =country).sum().sum())           
             var['Secondary Energy|Electricity|Gas|w/o CCS'] -= var['Secondary Energy|Electricity|Gas|w/ CCS']
             var['Secondary Energy|Electricity|Biomass|w/o CCS'] -= var['Secondary Energy|Electricity|Biomass|w/ CCS']
             """
             Electricity : Hydro (reservoir, ror)
             """
             #MWh -> EJ
-            var['Secondary Energy|Electricity|Hydro'] = 3.6e-9*(n.storage_units_t.p.filter(like ='hydro').filter(like =country).sum().sum())
-            var['Secondary Energy|Electricity|Hydro'] += 3.6e-9*(n.generators_t.p.filter(like ='ror').filter(like =country).sum().sum())
-
+            var['Secondary Energy|Electricity|Hydro'] = 3.6e-9*h*(n.storage_units_t.p.filter(like ='hydro').filter(like =country).sum().sum())
+            var['Secondary Energy|Electricity|Hydro'] += 3.6e-9*h*(n.generators_t.p.filter(like ='ror').filter(like =country).sum().sum())
+            
+            """
+            Heat : Solar, Gas, Biomass
+            """
+            #MWh -> EJ
+            var['Secondary Energy|Heat|Biomass'] = -3.6e-9*h*(n.links_t.p2.filter(like ='solid biomass CHP').filter(like =country).sum().sum())
+            var['Secondary Energy|Heat|Gas'] = -3.6e-9*h*(n.links_t.p2.filter(like ='gas CHP').filter(like =country).sum().sum()+
+                                                            n.links_t.p1.filter(like ='gas boiler').filter(like =country).sum().sum())
+            var['Secondary Energy|Heat|Oil'] = -3.6e-9*h*(n.links_t.p1.filter(like ='oil boiler').filter(like =country).sum().sum())
+            var['Secondary Energy|Heat|Solar'] = -3.6e-9*h*(n.generators_t.p.filter(like='solar thermal').filter(like=country).sum().sum())    
+            var['Secondary Energy|Heat|Other'] = -3.6e-9*h*(n.links_t.p1.filter(like ='resistive heater').filter(like =country).sum().sum()+
+                                                            n.links_t.p1.filter(like ='heat pump').filter(like =country).sum().sum()) 
+                
+            """
+            Hydrogen : Electrolyser
+            """
+            #MWh to EJ
+            var['Secondary Energy|Hydrogen|Electricity'] = -3.6e-9*h*(n.links_t.p1.filter(like ='H2 Electrolysis').filter(like =country).sum().sum())
+            var['Secondary Energy|Hydrogen|Gas'] = -3.6e-9*h*(n.links_t.p1.filter(like ='SMR').filter(like =country).sum().sum())
+            var['Secondary Energy|Hydrogen|Gas|w/ CCS'] = -3.6e-9*h*(n.links_t.p1.filter(like ='SMR CC').filter(like =country).sum().sum())
+            var['Secondary Energy|Hydrogen|Gas|w/o CCS'] = var['Secondary Energy|Hydrogen|Gas'] - var['Secondary Energy|Hydrogen|Gas|w/ CCS']
+            
             """
             Final Energy (heating) : heat pumps, heat resistors, Sabatier (synthetic gas)
             """
